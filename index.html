@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>台股多頭拉回雷達</title>
+    <meta
+      name="description"
+      content="依照 TradingView 台股資料，找出符合多頭本周大跌與多頭本月大跌條件的台灣股票。"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;800&family=DM+Sans:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">TradingView 台股掃描</p>
+          <h1>台股多頭拉回雷達</h1>
+          <p class="hero-text">
+            以參考頁面的兩個快捷條件為核心，直接掃描台股最新資料，抓出
+            <strong>仍站在 SMA200 之上</strong>、但已經出現明顯回檔的股票。
+          </p>
+          <div class="hero-actions">
+            <button id="refreshButton" class="primary-button" type="button">更新最新數據</button>
+            <a
+              class="ghost-button"
+              href="https://tw.tradingview.com/screener/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              開啟 TradingView
+            </a>
+          </div>
+          <p id="statusText" class="status-text" aria-live="polite">準備抓取最新資料...</p>
+        </div>
+        <aside class="logic-panel">
+          <h2>條件邏輯</h2>
+          <div class="logic-list">
+            <article class="logic-card logic-card-week">
+              <span class="logic-pill">多頭本周大跌</span>
+              <ul>
+                <li>股票類型</li>
+                <li>收盤價 &gt; SMA200</li>
+                <li>周績效 ≤ -5%</li>
+                <li>周波動率 ≥ 3%</li>
+              </ul>
+            </article>
+            <article class="logic-card logic-card-month">
+              <span class="logic-pill">多頭本月大跌</span>
+              <ul>
+                <li>股票類型</li>
+                <li>收盤價 &gt; SMA200</li>
+                <li>月績效 ≤ -10%</li>
+                <li>周波動率 ≥ 3%</li>
+              </ul>
+            </article>
+          </div>
+        </aside>
+      </header>
+
+      <main>
+        <section class="summary-grid" aria-label="統計摘要">
+          <article class="summary-card">
+            <span class="summary-label">符合本周大跌</span>
+            <strong id="weekCount" class="summary-value">-</strong>
+          </article>
+          <article class="summary-card">
+            <span class="summary-label">符合本月大跌</span>
+            <strong id="monthCount" class="summary-value">-</strong>
+          </article>
+          <article class="summary-card">
+            <span class="summary-label">雙重命中</span>
+            <strong id="bothCount" class="summary-value">-</strong>
+          </article>
+          <article class="summary-card">
+            <span class="summary-label">最新更新</span>
+            <strong id="lastUpdated" class="summary-value summary-time">尚未更新</strong>
+          </article>
+        </section>
+
+        <section class="toolbar">
+          <div class="control-group control-group-wide">
+            <label for="searchInput">搜尋股票</label>
+            <input
+              id="searchInput"
+              type="search"
+              placeholder="輸入代號、公司名稱或交易所，例如 2330 / 台積電 / TPEX"
+            />
+          </div>
+
+          <div class="control-group">
+            <label for="marketFilter">市場</label>
+            <select id="marketFilter">
+              <option value="ALL">全部</option>
+              <option value="TWSE">上市 TWSE</option>
+              <option value="TPEX">上櫃 TPEX</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label for="matchFilter">檢視模式</label>
+            <select id="matchFilter">
+              <option value="ALL">全部命中</option>
+              <option value="WEEK">只看本周大跌</option>
+              <option value="MONTH">只看本月大跌</option>
+              <option value="BOTH">只看雙重命中</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label for="sortMode">排序方式</label>
+            <select id="sortMode">
+              <option value="AUTO">依目前模式自動排序</option>
+              <option value="WEEK_ASC">周跌幅最大優先</option>
+              <option value="MONTH_ASC">月跌幅最大優先</option>
+              <option value="DISTANCE_ASC">最貼近 SMA200 優先</option>
+              <option value="VOL_DESC">波動率高優先</option>
+            </select>
+          </div>
+        </section>
+
+        <section class="table-panel">
+          <div class="table-header">
+            <div>
+              <h2>符合條件清單</h2>
+              <p class="panel-note">
+                滑鼠移到股票名稱或代號，可快顯 TradingView K 線圖。
+              </p>
+            </div>
+            <p id="resultMeta" class="result-meta">尚未載入資料</p>
+          </div>
+
+          <div id="protocolWarning" class="protocol-warning hidden">
+            目前若直接以 <code>file://</code> 開啟，TradingView 可能不會回傳資料。請用本地 HTTP
+            伺服器開啟這個資料夾，例如 <code>python -m http.server 4173</code>。
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>命中</th>
+                  <th>股票</th>
+                  <th>市價</th>
+                  <th>收盤日期</th>
+                  <th>周績效</th>
+                  <th>月績效</th>
+                  <th>周波動率</th>
+                  <th>SMA200</th>
+                  <th>距 SMA200</th>
+                  <th>市場</th>
+                </tr>
+              </thead>
+              <tbody id="stockTableBody">
+                <tr>
+                  <td colspan="10" class="empty-state">載入中...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="chartPreview" class="chart-preview hidden" role="dialog" aria-label="K 線圖快顯">
+      <div class="chart-preview-head">
+        <div>
+          <p id="previewSymbol" class="preview-symbol">TWSE:2330</p>
+          <p id="previewName" class="preview-name">台股 K 線快顯</p>
+        </div>
+        <a id="previewLink" href="#" target="_blank" rel="noreferrer">開啟完整圖表</a>
+      </div>
+      <iframe
+        id="previewFrame"
+        title="TradingView K 線圖快顯"
+        loading="lazy"
+        referrerpolicy="no-referrer-when-downgrade"
+      ></iframe>
+    </div>
+
+    <template id="rowTemplate">
+      <tr>
+        <td class="match-cell"></td>
+        <td class="symbol-cell"></td>
+        <td class="number-cell close-cell"></td>
+        <td class="close-date-cell"></td>
+        <td class="number-cell week-cell"></td>
+        <td class="number-cell month-cell"></td>
+        <td class="number-cell vol-cell"></td>
+        <td class="number-cell sma-cell"></td>
+        <td class="number-cell distance-cell"></td>
+        <td class="market-cell"></td>
+      </tr>
+    </template>
+
+    <script defer src="./app.js"></script>
+  </body>
+</html>
