@@ -25,7 +25,7 @@
           <p class="hero-text">
             以參考頁面的快捷條件為核心，直接掃描台股最新資料，抓出
             <strong>多頭回檔</strong>與<strong>空頭反彈</strong>的股票，並補上
-            TradingView 技術評級、距 SMA20 等可排序可篩選欄位。
+            TradingView 技術總評、距 SMA20 等可排序可篩選欄位。
           </p>
           <div class="hero-actions">
             <button id="refreshButton" class="primary-button" type="button">更新最新數據</button>
@@ -146,14 +146,14 @@
               <option value="BEAR_MONTH">月漲幅最大優先</option>
               <option value="DISTANCE_SMA200_ASC">最貼近 SMA200 優先</option>
               <option value="DISTANCE_SMA20_ASC">最貼近 SMA20 優先</option>
-              <option value="RATING_DESC">技術評級高優先</option>
-              <option value="RATING_ASC">技術評級低優先</option>
+              <option value="RATING_DESC">技術總評高優先</option>
+              <option value="RATING_ASC">技術總評低優先</option>
               <option value="VOL_DESC">波動率高優先</option>
             </select>
           </div>
 
           <div class="control-group">
-            <label for="analystFilter">TradingView 技術評級</label>
+            <label for="analystFilter">TradingView 技術總評</label>
             <select id="analystFilter">
               <option value="ALL">全部</option>
               <option value="STRONG_BUY">強力買進</option>
@@ -200,7 +200,7 @@
                   <th>周績效</th>
                   <th>月績效</th>
                   <th>周波動率</th>
-                  <th>TradingView 技術評級</th>
+                  <th>TradingView 技術總評</th>
                   <th>SMA200</th>
                   <th>距 SMA200</th>
                   <th>SMA20</th>
@@ -253,6 +253,6 @@
       </tr>
     </template>
 
-    <script defer src="./app.js?v=20260617-7"></script>
+    <script defer src="./app.js?v=20260617-8"></script>
   </body>
 </html>
