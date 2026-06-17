@@ -323,6 +323,14 @@ function matchesRange(value, min, max) {
 }
 
 function matchesMode(row, matchMode) {
+  if (matchMode === "ALL_STOCKS") {
+    return true;
+  }
+
+  if (matchMode === "MATCHED_ALL") {
+    return row.anyMatch;
+  }
+
   if (matchMode === "BULL_ALL") {
     return row.anyBullMatch;
   }
@@ -361,7 +369,7 @@ function matchesAnalystFilter(row, analystFilter) {
 function applyFilters() {
   const keyword = els.searchInput?.value.trim().toLowerCase() || "";
   const market = els.marketFilter?.value || "ALL";
-  const matchMode = els.matchFilter?.value || "ALL";
+  const matchMode = els.matchFilter?.value || "ALL_STOCKS";
   const sortMode = els.sortMode?.value || "AUTO";
   const analystFilter = els.analystFilter?.value || "ALL";
   const distance20Min = parseInputNumber(els.distance20Min);
@@ -404,6 +412,10 @@ function applyFilters() {
 function effectiveSortMode(sortMode, matchMode) {
   if (sortMode !== "AUTO") {
     return sortMode;
+  }
+
+  if (matchMode === "ALL_STOCKS") {
+    return "DISTANCE_SMA200_ASC";
   }
 
   if (matchMode === "BULL_WEEK") {

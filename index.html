@@ -125,7 +125,8 @@
           <div class="control-group">
             <label for="matchFilter">檢視模式</label>
             <select id="matchFilter">
-              <option value="ALL">全部命中</option>
+              <option value="ALL_STOCKS">全部個股</option>
+              <option value="MATCHED_ALL">全部命中</option>
               <option value="BULL_ALL">只看多頭回檔</option>
               <option value="BEAR_ALL">只看空頭反彈</option>
               <option value="BULL_WEEK">只看多頭本周大跌</option>
@@ -175,7 +176,7 @@
         <section class="table-panel">
           <div class="table-header">
             <div>
-              <h2>符合條件清單</h2>
+              <h2>個股清單</h2>
               <p class="panel-note">
                 滑鼠移到股票名稱或代號，可快顯 TradingView K 線圖。
               </p>
@@ -252,6 +253,6 @@
       </tr>
     </template>
 
-    <script defer src="./app.js?v=20260617-5"></script>
+    <script defer src="./app.js?v=20260617-6"></script>
   </body>
 </html>
