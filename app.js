@@ -23,14 +23,6 @@ const MATCH_DEFINITIONS = [
   { key: "bearMonthMatch", filterValue: "BEAR_MONTH", label: "空頭本月大漲", badgeClass: "badge-bear-month" },
 ];
 
-const ANALYST_BANDS = [
-  { value: "STRONG_BUY", label: "強力買進", min: 0.5, max: Number.POSITIVE_INFINITY, tone: "positive" },
-  { value: "BUY", label: "買進", min: 0.1, max: 0.5, tone: "positive" },
-  { value: "NEUTRAL", label: "中立", min: -0.1, max: 0.1, tone: "neutral" },
-  { value: "SELL", label: "賣出", min: -0.5, max: -0.1, tone: "negative" },
-  { value: "STRONG_SELL", label: "強力賣出", min: Number.NEGATIVE_INFINITY, max: -0.5, tone: "negative" },
-];
-
 function selectAny(selectors) {
   for (const selector of selectors) {
     const element = document.querySelector(selector);
@@ -159,7 +151,23 @@ function getAnalystBand(score) {
     return null;
   }
 
-  return ANALYST_BANDS.find((band) => score >= band.min && score < band.max) || ANALYST_BANDS[2];
+  if (score < -0.5) {
+    return { value: "STRONG_SELL", label: "強力賣出", tone: "negative" };
+  }
+
+  if (score < -0.1) {
+    return { value: "SELL", label: "賣出", tone: "negative" };
+  }
+
+  if (score <= 0.1) {
+    return { value: "NEUTRAL", label: "中立", tone: "neutral" };
+  }
+
+  if (score <= 0.5) {
+    return { value: "BUY", label: "買進", tone: "positive" };
+  }
+
+  return { value: "STRONG_BUY", label: "強力買進", tone: "positive" };
 }
 
 function buildWidgetUrl(symbol) {
@@ -620,7 +628,7 @@ function buildRatingCell(row) {
   label.textContent = row.analystBand.label;
 
   const score = document.createElement("span");
-  score.textContent = `分數 ${formatNumber(row.analystScore, 2)}`;
+  score.textContent = `分數 ${formatNumber(row.analystScore, 3)}`;
 
   wrap.append(label, score);
   return wrap;
