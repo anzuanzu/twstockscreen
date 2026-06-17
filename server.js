@@ -5,8 +5,6 @@ const path = require("path");
 const PORT = Number(process.env.PORT || 4173);
 const ROOT = __dirname;
 const SCAN_URL = "https://scanner.tradingview.com/taiwan/scan";
-const TWSE_REVENUE_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap05_L";
-const TPEX_REVENUE_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O";
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -66,31 +64,12 @@ async function proxyTaiwanScan(req, res) {
   res.end(text);
 }
 
-async function proxyRevenueGrowth(res) {
-  const [twseResponse, tpexResponse] = await Promise.all([
-    fetch(TWSE_REVENUE_URL),
-    fetch(TPEX_REVENUE_URL),
-  ]);
-
-  if (!twseResponse.ok || !tpexResponse.ok) {
-    throw new Error("Revenue proxy upstream failed");
-  }
-
-  const [twse, tpex] = await Promise.all([twseResponse.json(), tpexResponse.json()]);
-  sendJson(res, 200, { twse, tpex });
-}
-
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
 
     if (req.method === "POST" && url.pathname === "/api/taiwan-scan") {
       await proxyTaiwanScan(req, res);
-      return;
-    }
-
-    if (req.method === "GET" && url.pathname === "/api/revenue-growth") {
-      await proxyRevenueGrowth(res);
       return;
     }
 

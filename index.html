@@ -14,7 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;800&family=DM+Sans:wght@500;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260617-2" />
+    <link rel="stylesheet" href="./styles.css?v=20260617-3" />
   </head>
   <body>
     <div class="page-shell">
@@ -24,7 +24,7 @@
           <h1>台股 SMA200 條件雷達</h1>
           <p class="hero-text">
             以參考頁面的快捷條件為核心，直接掃描台股最新資料，抓出
-            <strong>多頭回檔</strong>與<strong>空頭反彈</strong>的股票，並補上收入增長、
+            <strong>多頭回檔</strong>與<strong>空頭反彈</strong>的股票，並補上
             分析師評級、距 SMA20 等可排序可篩選欄位。
           </p>
           <div class="hero-actions">
@@ -145,8 +145,6 @@
               <option value="BEAR_MONTH">月漲幅最大優先</option>
               <option value="DISTANCE_SMA200_ASC">最貼近 SMA200 優先</option>
               <option value="DISTANCE_SMA20_ASC">最貼近 SMA20 優先</option>
-              <option value="REVENUE_DESC">收入增長高優先</option>
-              <option value="REVENUE_ASC">收入增長低優先</option>
               <option value="RATING_DESC">分析師評級高優先</option>
               <option value="RATING_ASC">分析師評級低優先</option>
               <option value="VOL_DESC">波動率高優先</option>
@@ -163,14 +161,6 @@
               <option value="SELL">賣出</option>
               <option value="STRONG_SELL">強力賣出</option>
             </select>
-          </div>
-
-          <div class="control-group">
-            <label for="revenueGrowthMin">收入增長 % 累計年增率</label>
-            <div class="range-fields">
-              <input id="revenueGrowthMin" type="number" step="0.1" placeholder="最小 %" />
-              <input id="revenueGrowthMax" type="number" step="0.1" placeholder="最大 %" />
-            </div>
           </div>
 
           <div class="control-group">
@@ -209,7 +199,6 @@
                   <th>周績效</th>
                   <th>月績效</th>
                   <th>周波動率</th>
-                  <th>收入增長 % 累計年增率</th>
                   <th>分析師評級</th>
                   <th>SMA200</th>
                   <th>距 SMA200</th>
@@ -220,7 +209,7 @@
               </thead>
               <tbody id="stockTableBody">
                 <tr>
-                  <td colspan="14" class="empty-state">載入中...</td>
+                  <td colspan="13" class="empty-state">載入中...</td>
                 </tr>
               </tbody>
             </table>
@@ -254,7 +243,6 @@
         <td class="number-cell week-cell"></td>
         <td class="number-cell month-cell"></td>
         <td class="number-cell vol-cell"></td>
-        <td class="number-cell revenue-cell"></td>
         <td class="rating-cell"></td>
         <td class="number-cell sma-cell"></td>
         <td class="number-cell distance200-cell distance-cell"></td>
@@ -264,6 +252,6 @@
       </tr>
     </template>
 
-    <script defer src="./app.js?v=20260617-4"></script>
+    <script defer src="./app.js?v=20260617-5"></script>
   </body>
 </html>

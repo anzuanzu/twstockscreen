@@ -1,6 +1,6 @@
 const SCAN_PROXY_URL = "/api/taiwan-scan";
 const SCAN_URL = "https://scanner.tradingview.com/taiwan/scan";
-const TABLE_COLUMN_COUNT = 14;
+const TABLE_COLUMN_COUNT = 13;
 const COLUMNS = [
   "name",
   "description",
@@ -14,7 +14,6 @@ const COLUMNS = [
   "market_cap_basic",
   "type",
   "Recommend.All",
-  "sales_growth_ttm_yoy",
 ];
 
 const MATCH_DEFINITIONS = [
@@ -31,10 +30,6 @@ const ANALYST_BANDS = [
   { value: "SELL", label: "賣出", min: -0.5, max: -0.1, tone: "negative" },
   { value: "STRONG_SELL", label: "強力賣出", min: Number.NEGATIVE_INFINITY, max: -0.5, tone: "negative" },
 ];
-
-const REVENUE_PROXY_URL = "/api/revenue-growth";
-const TWSE_REVENUE_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap05_L";
-const TPEX_REVENUE_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O";
 
 function selectAny(selectors) {
   for (const selector of selectors) {
@@ -53,7 +48,6 @@ const state = {
   filteredRows: [],
   lastUpdated: null,
   previewHideTimer: null,
-  revenueStatus: "idle",
 };
 
 const els = {
@@ -69,8 +63,6 @@ const els = {
   matchFilter: document.querySelector("#matchFilter"),
   sortMode: document.querySelector("#sortMode"),
   analystFilter: document.querySelector("#analystFilter"),
-  revenueGrowthMin: document.querySelector("#revenueGrowthMin"),
-  revenueGrowthMax: document.querySelector("#revenueGrowthMax"),
   distance20Min: document.querySelector("#distance20Min"),
   distance20Max: document.querySelector("#distance20Max"),
   resultMeta: document.querySelector("#resultMeta"),
@@ -199,15 +191,6 @@ function buildSymbolPageUrl(symbol) {
   return `https://tw.tradingview.com/chart/?symbol=${encodeURIComponent(symbol)}`;
 }
 
-function parseRevenueNumber(value) {
-  if (value == null) {
-    return null;
-  }
-
-  const parsed = Number(String(value).replaceAll(",", "").trim());
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
 function normaliseRow(item) {
   const [exchange, code] = item.s.split(":");
   const [
@@ -223,7 +206,6 @@ function normaliseRow(item) {
     marketCap,
     type,
     analystScore,
-    revenueGrowthTtmYoy,
   ] = item.d;
 
   const isStock = type === "stock" && close != null && sma200 != null;
@@ -251,8 +233,6 @@ function normaliseRow(item) {
     type,
     analystScore,
     analystBand,
-    revenueGrowthTtmYoy,
-    revenueGrowthSource: revenueGrowthTtmYoy == null ? "tradingview-empty" : "tradingview",
     bullWeekMatch,
     bullMonthMatch,
     bearWeekMatch,
@@ -263,63 +243,6 @@ function normaliseRow(item) {
     distanceSma200Pct: distancePercent(close, sma200),
     distanceSma20Pct: distancePercent(close, sma20),
   };
-}
-
-async function fetchOfficialRevenueGrowth() {
-  let twseRows = [];
-  let tpexRows = [];
-
-  try {
-    const proxyResponse = await fetch(REVENUE_PROXY_URL);
-
-    if (!proxyResponse.ok) {
-      throw new Error(`proxy ${proxyResponse.status}`);
-    }
-
-    const proxyPayload = await proxyResponse.json();
-    twseRows = Array.isArray(proxyPayload.twse) ? proxyPayload.twse : [];
-    tpexRows = Array.isArray(proxyPayload.tpex) ? proxyPayload.tpex : [];
-    state.revenueStatus = "proxy";
-  } catch {
-    state.revenueStatus = "unavailable";
-    return new Map();
-  }
-
-  const revenueMap = new Map();
-
-  for (const row of [...twseRows, ...tpexRows]) {
-    const code = row["公司代號"];
-    const growth = parseRevenueNumber(row["累計營業收入-前期比較增減(%)"]);
-    const month = row["資料年月"] || null;
-
-    if (!code || growth == null) {
-      continue;
-    }
-
-    revenueMap.set(code, {
-      growth,
-      month,
-    });
-  }
-
-  return revenueMap;
-}
-
-function mergeRevenueGrowth(rows, revenueMap) {
-  return rows.map((row) => {
-    const revenue = revenueMap.get(row.code);
-
-    if (!revenue || row.revenueGrowthTtmYoy != null) {
-      return row;
-    }
-
-    return {
-      ...row,
-      revenueGrowthTtmYoy: revenue.growth,
-      revenueGrowthSource: "official-ytd",
-      revenueGrowthMonth: revenue.month,
-    };
-  });
 }
 
 async function fetchStocks() {
@@ -441,8 +364,6 @@ function applyFilters() {
   const matchMode = els.matchFilter?.value || "ALL";
   const sortMode = els.sortMode?.value || "AUTO";
   const analystFilter = els.analystFilter?.value || "ALL";
-  const revenueMin = parseInputNumber(els.revenueGrowthMin);
-  const revenueMax = parseInputNumber(els.revenueGrowthMax);
   const distance20Min = parseInputNumber(els.distance20Min);
   const distance20Max = parseInputNumber(els.distance20Max);
 
@@ -456,10 +377,6 @@ function applyFilters() {
     }
 
     if (!matchesAnalystFilter(row, analystFilter)) {
-      return false;
-    }
-
-    if (!matchesRange(row.revenueGrowthTtmYoy, revenueMin, revenueMax)) {
       return false;
     }
 
@@ -560,32 +477,12 @@ function compareRows(left, right, sortMode, matchMode) {
     );
   }
 
-  if (effectiveMode === "REVENUE_DESC") {
-    return (
-      compareNumeric(left.revenueGrowthTtmYoy, right.revenueGrowthTtmYoy, { direction: "desc" }) ||
-      compareNumeric(left.analystScore, right.analystScore, { direction: "desc" })
-    );
-  }
-
-  if (effectiveMode === "REVENUE_ASC") {
-    return (
-      compareNumeric(left.revenueGrowthTtmYoy, right.revenueGrowthTtmYoy) ||
-      compareNumeric(left.analystScore, right.analystScore)
-    );
-  }
-
   if (effectiveMode === "RATING_DESC") {
-    return (
-      compareNumeric(left.analystScore, right.analystScore, { direction: "desc" }) ||
-      compareNumeric(left.revenueGrowthTtmYoy, right.revenueGrowthTtmYoy, { direction: "desc" })
-    );
+    return compareNumeric(left.analystScore, right.analystScore, { direction: "desc" });
   }
 
   if (effectiveMode === "RATING_ASC") {
-    return (
-      compareNumeric(left.analystScore, right.analystScore) ||
-      compareNumeric(left.revenueGrowthTtmYoy, right.revenueGrowthTtmYoy)
-    );
+    return compareNumeric(left.analystScore, right.analystScore);
   }
 
   if (effectiveMode === "VOL_DESC") {
@@ -628,7 +525,6 @@ function renderRows(rows) {
       <td class="number-cell week-cell"></td>
       <td class="number-cell month-cell"></td>
       <td class="number-cell vol-cell"></td>
-      <td class="number-cell revenue-cell"></td>
       <td class="rating-cell"></td>
       <td class="number-cell sma-cell"></td>
       <td class="number-cell distance200-cell"></td>
@@ -643,7 +539,6 @@ function renderRows(rows) {
     const weekCell = node.querySelector(".week-cell");
     const monthCell = node.querySelector(".month-cell");
     const volCell = node.querySelector(".vol-cell");
-    const revenueCell = node.querySelector(".revenue-cell");
     const ratingCell = node.querySelector(".rating-cell");
     const smaCell = node.querySelector(".sma-cell");
     const distance200Cell = node.querySelector(".distance200-cell");
@@ -658,7 +553,6 @@ function renderRows(rows) {
     setText(weekCell, formatPercent(row.perfWeek));
     setText(monthCell, formatPercent(row.perfMonth));
     setText(volCell, formatPercent(row.volatilityWeek));
-    setText(revenueCell, formatPercent(row.revenueGrowthTtmYoy));
     if (ratingCell) {
       ratingCell.appendChild(buildRatingCell(row));
     }
@@ -671,7 +565,6 @@ function renderRows(rows) {
     if (weekCell) weekCell.className = `number-cell week-cell ${getNumberClass(row.perfWeek)}`;
     if (monthCell) monthCell.className = `number-cell month-cell ${getNumberClass(row.perfMonth)}`;
     if (volCell) volCell.className = `number-cell vol-cell ${getNumberClass(row.volatilityWeek)}`;
-    if (revenueCell) revenueCell.className = `number-cell revenue-cell ${getNumberClass(row.revenueGrowthTtmYoy)}`;
     if (distance200Cell) distance200Cell.className = `number-cell distance200-cell ${getNumberClass(row.distanceSma200Pct)}`;
     if (distance20Cell) distance20Cell.className = `number-cell distance20-cell ${getNumberClass(row.distanceSma20Pct)}`;
 
@@ -804,8 +697,7 @@ async function refreshData() {
   );
 
   try {
-    const [rows, revenueMap] = await Promise.all([fetchStocks(), fetchOfficialRevenueGrowth()]);
-    state.rows = mergeRevenueGrowth(rows, revenueMap);
+    state.rows = await fetchStocks();
     state.lastUpdated = new Date();
 
     updateSummary(state.rows);
@@ -818,12 +710,7 @@ async function refreshData() {
     }).format(state.lastUpdated);
 
     setText(els.lastUpdated, timeText);
-    const revenueNote =
-      state.revenueStatus === "proxy" ? " 已載入官方營收年增資料。" : " 官方營收年增資料暫時不可用。";
-    setText(
-      els.statusText,
-      `更新完成，共取得 ${state.rows.length.toLocaleString("zh-TW")} 檔台股資料。${revenueNote}`,
-    );
+    setText(els.statusText, `更新完成，共取得 ${state.rows.length.toLocaleString("zh-TW")} 檔台股資料。`);
   } catch (error) {
     setText(els.statusText, `更新失敗：${error.message}`);
     setHtml(
@@ -845,8 +732,6 @@ function bindEvents() {
   els.matchFilter?.addEventListener("change", applyFilters);
   els.sortMode?.addEventListener("change", applyFilters);
   els.analystFilter?.addEventListener("change", applyFilters);
-  els.revenueGrowthMin?.addEventListener("input", applyFilters);
-  els.revenueGrowthMax?.addEventListener("input", applyFilters);
   els.distance20Min?.addEventListener("input", applyFilters);
   els.distance20Max?.addEventListener("input", applyFilters);
   els.preview?.addEventListener("mouseenter", () => clearTimeout(state.previewHideTimer));
