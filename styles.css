@@ -174,6 +174,7 @@ h1 {
 
 .logic-list {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -183,12 +184,20 @@ h1 {
   border: 1px solid rgba(25, 33, 38, 0.08);
 }
 
-.logic-card-week {
+.logic-card-bull-week {
   background: linear-gradient(180deg, rgba(203, 90, 46, 0.08), rgba(255, 255, 255, 0.65));
 }
 
-.logic-card-month {
+.logic-card-bull-month {
   background: linear-gradient(180deg, rgba(15, 122, 115, 0.1), rgba(255, 255, 255, 0.65));
+}
+
+.logic-card-bear-week {
+  background: linear-gradient(180deg, rgba(183, 59, 49, 0.1), rgba(255, 255, 255, 0.65));
+}
+
+.logic-card-bear-month {
+  background: linear-gradient(180deg, rgba(25, 33, 38, 0.08), rgba(255, 255, 255, 0.7));
 }
 
 .logic-pill {
@@ -212,7 +221,7 @@ h1 {
 .summary-grid {
   margin-top: 20px;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 14px;
 }
 
@@ -247,8 +256,12 @@ h1 {
   padding: 18px;
   border-radius: var(--radius-lg);
   display: grid;
-  grid-template-columns: minmax(280px, 1.6fr) repeat(3, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 14px;
+}
+
+.control-group-wide {
+  grid-column: span 2;
 }
 
 .control-group {
@@ -271,6 +284,12 @@ h1 {
   min-height: 48px;
   padding: 12px 14px;
   color: var(--ink);
+}
+
+.range-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .table-panel {
@@ -315,7 +334,7 @@ h1 {
 table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 980px;
+  min-width: 1420px;
   background: rgba(255, 251, 243, 0.82);
 }
 
@@ -397,16 +416,6 @@ tbody tr:hover {
   background: var(--week-soft);
 }
 
-.badge-month {
-  color: var(--teal);
-  background: var(--month-soft);
-}
-
-.badge-both {
-  color: #7c4f12;
-  background: rgba(200, 157, 42, 0.18);
-}
-
 .negative {
   color: var(--danger);
   font-variant-numeric: tabular-nums;
@@ -431,6 +440,41 @@ tbody tr:hover {
   background: rgba(25, 33, 38, 0.06);
   font-size: 0.82rem;
   font-weight: 700;
+}
+
+.badge-bull-week {
+  color: var(--accent-strong);
+  background: var(--week-soft);
+}
+
+.badge-bull-month {
+  color: var(--teal);
+  background: var(--month-soft);
+}
+
+.badge-bear-week {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.badge-bear-month {
+  color: var(--ink);
+  background: rgba(25, 33, 38, 0.08);
+}
+
+.rating-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rating-stack strong {
+  font-size: 0.92rem;
+}
+
+.rating-stack span {
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 .chart-preview {
@@ -491,12 +535,8 @@ code {
     grid-template-columns: 1fr;
   }
 
-  .summary-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .toolbar {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .logic-list {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -512,8 +552,13 @@ code {
   }
 
   .summary-grid,
-  .toolbar {
+  .toolbar,
+  .range-fields {
     grid-template-columns: 1fr;
+  }
+
+  .control-group-wide {
+    grid-column: auto;
   }
 
   .table-header {

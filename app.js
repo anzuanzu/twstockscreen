@@ -1,4 +1,5 @@
 const SCAN_URL = "https://scanner.tradingview.com/taiwan/scan";
+const TABLE_COLUMN_COUNT = 14;
 const COLUMNS = [
   "name",
   "description",
@@ -8,8 +9,26 @@ const COLUMNS = [
   "Perf.1M",
   "Volatility.W",
   "SMA200",
+  "SMA20",
   "market_cap_basic",
   "type",
+  "Recommend.All",
+  "sales_growth_ttm_yoy",
+];
+
+const MATCH_DEFINITIONS = [
+  { key: "bullWeekMatch", filterValue: "BULL_WEEK", label: "多頭本周大跌", badgeClass: "badge-bull-week" },
+  { key: "bullMonthMatch", filterValue: "BULL_MONTH", label: "多頭本月大跌", badgeClass: "badge-bull-month" },
+  { key: "bearWeekMatch", filterValue: "BEAR_WEEK", label: "空頭本周大漲", badgeClass: "badge-bear-week" },
+  { key: "bearMonthMatch", filterValue: "BEAR_MONTH", label: "空頭本月大漲", badgeClass: "badge-bear-month" },
+];
+
+const ANALYST_BANDS = [
+  { value: "STRONG_BUY", label: "強力買進", min: 0.5, max: Number.POSITIVE_INFINITY, tone: "positive" },
+  { value: "BUY", label: "買進", min: 0.1, max: 0.5, tone: "positive" },
+  { value: "NEUTRAL", label: "中立", min: -0.1, max: 0.1, tone: "neutral" },
+  { value: "SELL", label: "賣出", min: -0.5, max: -0.1, tone: "negative" },
+  { value: "STRONG_SELL", label: "強力賣出", min: Number.NEGATIVE_INFINITY, max: -0.5, tone: "negative" },
 ];
 
 const state = {
@@ -23,14 +42,20 @@ const state = {
 const els = {
   refreshButton: document.querySelector("#refreshButton"),
   statusText: document.querySelector("#statusText"),
-  weekCount: document.querySelector("#weekCount"),
-  monthCount: document.querySelector("#monthCount"),
-  bothCount: document.querySelector("#bothCount"),
+  bullWeekCount: document.querySelector("#bullWeekCount"),
+  bullMonthCount: document.querySelector("#bullMonthCount"),
+  bearWeekCount: document.querySelector("#bearWeekCount"),
+  bearMonthCount: document.querySelector("#bearMonthCount"),
   lastUpdated: document.querySelector("#lastUpdated"),
   searchInput: document.querySelector("#searchInput"),
   marketFilter: document.querySelector("#marketFilter"),
   matchFilter: document.querySelector("#matchFilter"),
   sortMode: document.querySelector("#sortMode"),
+  analystFilter: document.querySelector("#analystFilter"),
+  revenueGrowthMin: document.querySelector("#revenueGrowthMin"),
+  revenueGrowthMax: document.querySelector("#revenueGrowthMax"),
+  distance20Min: document.querySelector("#distance20Min"),
+  distance20Max: document.querySelector("#distance20Max"),
   resultMeta: document.querySelector("#resultMeta"),
   stockTableBody: document.querySelector("#stockTableBody"),
   rowTemplate: document.querySelector("#rowTemplate"),
@@ -84,12 +109,12 @@ function marketLabel(exchange) {
   return exchange === "TWSE" ? "上市 TWSE" : exchange === "TPEX" ? "上櫃 TPEX" : exchange;
 }
 
-function trendDistance(close, sma200) {
-  if (close == null || sma200 == null || !sma200) {
+function distancePercent(close, average) {
+  if (close == null || average == null || !average) {
     return null;
   }
 
-  return ((close - sma200) / sma200) * 100;
+  return ((close - average) / average) * 100;
 }
 
 function getNumberClass(value) {
@@ -106,6 +131,14 @@ function getNumberClass(value) {
   }
 
   return "neutral";
+}
+
+function getAnalystBand(score) {
+  if (score == null || Number.isNaN(score)) {
+    return null;
+  }
+
+  return ANALYST_BANDS.find((band) => score >= band.min && score < band.max) || ANALYST_BANDS[2];
 }
 
 function buildWidgetUrl(symbol) {
@@ -148,31 +181,19 @@ function normaliseRow(item) {
     perfMonth,
     volatilityWeek,
     sma200,
+    sma20,
     marketCap,
     type,
+    analystScore,
+    revenueGrowthTtmYoy,
   ] = item.d;
 
-  const weekMatch =
-    type === "stock" &&
-    close != null &&
-    sma200 != null &&
-    volatilityWeek != null &&
-    close > sma200 &&
-    perfWeek != null &&
-    perfWeek <= -5 &&
-    volatilityWeek >= 3;
-
-  const monthMatch =
-    type === "stock" &&
-    close != null &&
-    sma200 != null &&
-    volatilityWeek != null &&
-    close > sma200 &&
-    perfMonth != null &&
-    perfMonth <= -10 &&
-    volatilityWeek >= 3;
-
-  const distancePct = trendDistance(close, sma200);
+  const isStock = type === "stock" && close != null && sma200 != null;
+  const bullWeekMatch = isStock && close > sma200 && perfWeek != null && perfWeek <= -5;
+  const bullMonthMatch = isStock && close > sma200 && perfMonth != null && perfMonth <= -10;
+  const bearWeekMatch = isStock && close < sma200 && perfWeek != null && perfWeek >= 5;
+  const bearMonthMatch = isStock && close < sma200 && perfMonth != null && perfMonth >= 10;
+  const analystBand = getAnalystBand(analystScore);
 
   return {
     id: item.s,
@@ -187,12 +208,21 @@ function normaliseRow(item) {
     perfMonth,
     volatilityWeek,
     sma200,
+    sma20,
     marketCap,
     type,
-    weekMatch,
-    monthMatch,
-    bothMatch: weekMatch && monthMatch,
-    distancePct,
+    analystScore,
+    analystBand,
+    revenueGrowthTtmYoy,
+    bullWeekMatch,
+    bullMonthMatch,
+    bearWeekMatch,
+    bearMonthMatch,
+    anyBullMatch: bullWeekMatch || bullMonthMatch,
+    anyBearMatch: bearWeekMatch || bearMonthMatch,
+    anyMatch: bullWeekMatch || bullMonthMatch || bearWeekMatch || bearMonthMatch,
+    distanceSma200Pct: distancePercent(close, sma200),
+    distanceSma20Pct: distancePercent(close, sma20),
   };
 }
 
@@ -227,13 +257,76 @@ async function fetchStocks() {
 }
 
 function updateSummary(rows) {
-  const weekCount = rows.filter((row) => row.weekMatch).length;
-  const monthCount = rows.filter((row) => row.monthMatch).length;
-  const bothCount = rows.filter((row) => row.bothMatch).length;
+  els.bullWeekCount.textContent = rows.filter((row) => row.bullWeekMatch).length.toLocaleString("zh-TW");
+  els.bullMonthCount.textContent = rows
+    .filter((row) => row.bullMonthMatch)
+    .length.toLocaleString("zh-TW");
+  els.bearWeekCount.textContent = rows.filter((row) => row.bearWeekMatch).length.toLocaleString("zh-TW");
+  els.bearMonthCount.textContent = rows
+    .filter((row) => row.bearMonthMatch)
+    .length.toLocaleString("zh-TW");
+}
 
-  els.weekCount.textContent = weekCount.toLocaleString("zh-TW");
-  els.monthCount.textContent = monthCount.toLocaleString("zh-TW");
-  els.bothCount.textContent = bothCount.toLocaleString("zh-TW");
+function parseInputNumber(input) {
+  const value = input.value.trim();
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function matchesRange(value, min, max) {
+  if (value == null || Number.isNaN(value)) {
+    return min == null && max == null;
+  }
+
+  if (min != null && value < min) {
+    return false;
+  }
+
+  if (max != null && value > max) {
+    return false;
+  }
+
+  return true;
+}
+
+function matchesMode(row, matchMode) {
+  if (matchMode === "BULL_ALL") {
+    return row.anyBullMatch;
+  }
+
+  if (matchMode === "BEAR_ALL") {
+    return row.anyBearMatch;
+  }
+
+  if (matchMode === "BULL_WEEK") {
+    return row.bullWeekMatch;
+  }
+
+  if (matchMode === "BULL_MONTH") {
+    return row.bullMonthMatch;
+  }
+
+  if (matchMode === "BEAR_WEEK") {
+    return row.bearWeekMatch;
+  }
+
+  if (matchMode === "BEAR_MONTH") {
+    return row.bearMonthMatch;
+  }
+
+  return row.anyMatch;
+}
+
+function matchesAnalystFilter(row, analystFilter) {
+  if (analystFilter === "ALL") {
+    return true;
+  }
+
+  return row.analystBand?.value === analystFilter;
 }
 
 function applyFilters() {
@@ -241,9 +334,14 @@ function applyFilters() {
   const market = els.marketFilter.value;
   const matchMode = els.matchFilter.value;
   const sortMode = els.sortMode.value;
+  const analystFilter = els.analystFilter.value;
+  const revenueMin = parseInputNumber(els.revenueGrowthMin);
+  const revenueMax = parseInputNumber(els.revenueGrowthMax);
+  const distance20Min = parseInputNumber(els.distance20Min);
+  const distance20Max = parseInputNumber(els.distance20Max);
 
   const filtered = state.rows.filter((row) => {
-    if (!(row.weekMatch || row.monthMatch)) {
+    if (!matchesMode(row, matchMode)) {
       return false;
     }
 
@@ -251,15 +349,15 @@ function applyFilters() {
       return false;
     }
 
-    if (matchMode === "WEEK" && !row.weekMatch) {
+    if (!matchesAnalystFilter(row, analystFilter)) {
       return false;
     }
 
-    if (matchMode === "MONTH" && !row.monthMatch) {
+    if (!matchesRange(row.revenueGrowthTtmYoy, revenueMin, revenueMax)) {
       return false;
     }
 
-    if (matchMode === "BOTH" && !row.bothMatch) {
+    if (!matchesRange(row.distanceSma20Pct, distance20Min, distance20Max)) {
       return false;
     }
 
@@ -274,38 +372,125 @@ function applyFilters() {
   const sorted = [...filtered].sort((left, right) => compareRows(left, right, sortMode, matchMode));
   state.filteredRows = sorted;
   renderRows(sorted);
-  els.resultMeta.textContent = `顯示 ${sorted.length.toLocaleString("zh-TW")} 檔 / 原始掃描 ${
-    state.rows.length.toLocaleString("zh-TW")
-  } 檔`;
+  els.resultMeta.textContent = `顯示 ${sorted.length.toLocaleString("zh-TW")} 檔 / 原始掃描 ${state.rows.length.toLocaleString("zh-TW")} 檔`;
+}
+
+function effectiveSortMode(sortMode, matchMode) {
+  if (sortMode !== "AUTO") {
+    return sortMode;
+  }
+
+  if (matchMode === "BULL_WEEK") {
+    return "BULL_WEEK";
+  }
+
+  if (matchMode === "BULL_MONTH") {
+    return "BULL_MONTH";
+  }
+
+  if (matchMode === "BEAR_WEEK") {
+    return "BEAR_WEEK";
+  }
+
+  if (matchMode === "BEAR_MONTH") {
+    return "BEAR_MONTH";
+  }
+
+  return "DISTANCE_SMA200_ASC";
+}
+
+function compareNumeric(a, b, { direction = "asc", absolute = false } = {}) {
+  if (a == null || Number.isNaN(a)) {
+    return b == null || Number.isNaN(b) ? 0 : 1;
+  }
+
+  if (b == null || Number.isNaN(b)) {
+    return -1;
+  }
+
+  const left = absolute ? Math.abs(a) : a;
+  const right = absolute ? Math.abs(b) : b;
+  return direction === "desc" ? right - left : left - right;
 }
 
 function compareRows(left, right, sortMode, matchMode) {
-  const effectiveMode =
-    sortMode === "AUTO"
-      ? matchMode === "WEEK"
-        ? "WEEK_ASC"
-        : matchMode === "MONTH"
-          ? "MONTH_ASC"
-          : "DISTANCE_ASC"
-      : sortMode;
+  const effectiveMode = effectiveSortMode(sortMode, matchMode);
 
-  if (effectiveMode === "WEEK_ASC") {
-    return safeNumber(left.perfWeek) - safeNumber(right.perfWeek) || safeNumber(right.distancePct) - safeNumber(left.distancePct);
+  if (effectiveMode === "BULL_WEEK") {
+    return (
+      compareNumeric(left.perfWeek, right.perfWeek) ||
+      compareNumeric(left.distanceSma200Pct, right.distanceSma200Pct, { absolute: true })
+    );
   }
 
-  if (effectiveMode === "MONTH_ASC") {
-    return safeNumber(left.perfMonth) - safeNumber(right.perfMonth) || safeNumber(right.distancePct) - safeNumber(left.distancePct);
+  if (effectiveMode === "BEAR_WEEK") {
+    return (
+      compareNumeric(left.perfWeek, right.perfWeek, { direction: "desc" }) ||
+      compareNumeric(left.distanceSma200Pct, right.distanceSma200Pct, { absolute: true })
+    );
+  }
+
+  if (effectiveMode === "BULL_MONTH") {
+    return (
+      compareNumeric(left.perfMonth, right.perfMonth) ||
+      compareNumeric(left.distanceSma200Pct, right.distanceSma200Pct, { absolute: true })
+    );
+  }
+
+  if (effectiveMode === "BEAR_MONTH") {
+    return (
+      compareNumeric(left.perfMonth, right.perfMonth, { direction: "desc" }) ||
+      compareNumeric(left.distanceSma200Pct, right.distanceSma200Pct, { absolute: true })
+    );
+  }
+
+  if (effectiveMode === "DISTANCE_SMA20_ASC") {
+    return (
+      compareNumeric(left.distanceSma20Pct, right.distanceSma20Pct, { absolute: true }) ||
+      compareNumeric(left.distanceSma200Pct, right.distanceSma200Pct, { absolute: true })
+    );
+  }
+
+  if (effectiveMode === "REVENUE_DESC") {
+    return (
+      compareNumeric(left.revenueGrowthTtmYoy, right.revenueGrowthTtmYoy, { direction: "desc" }) ||
+      compareNumeric(left.analystScore, right.analystScore, { direction: "desc" })
+    );
+  }
+
+  if (effectiveMode === "REVENUE_ASC") {
+    return (
+      compareNumeric(left.revenueGrowthTtmYoy, right.revenueGrowthTtmYoy) ||
+      compareNumeric(left.analystScore, right.analystScore)
+    );
+  }
+
+  if (effectiveMode === "RATING_DESC") {
+    return (
+      compareNumeric(left.analystScore, right.analystScore, { direction: "desc" }) ||
+      compareNumeric(left.revenueGrowthTtmYoy, right.revenueGrowthTtmYoy, { direction: "desc" })
+    );
+  }
+
+  if (effectiveMode === "RATING_ASC") {
+    return (
+      compareNumeric(left.analystScore, right.analystScore) ||
+      compareNumeric(left.revenueGrowthTtmYoy, right.revenueGrowthTtmYoy)
+    );
   }
 
   if (effectiveMode === "VOL_DESC") {
-    return safeNumber(right.volatilityWeek) - safeNumber(left.volatilityWeek) || safeNumber(left.perfWeek) - safeNumber(right.perfWeek);
+    return (
+      compareNumeric(left.volatilityWeek, right.volatilityWeek, { direction: "desc" }) ||
+      compareNumeric(left.distanceSma200Pct, right.distanceSma200Pct, { absolute: true })
+    );
   }
 
-  return Math.abs(safeNumber(left.distancePct)) - Math.abs(safeNumber(right.distancePct)) || safeNumber(left.perfWeek) - safeNumber(right.perfWeek);
-}
-
-function safeNumber(value) {
-  return value == null || Number.isNaN(value) ? Number.POSITIVE_INFINITY : value;
+  return (
+    compareNumeric(left.distanceSma200Pct, right.distanceSma200Pct, { absolute: true }) ||
+    compareNumeric(left.distanceSma20Pct, right.distanceSma20Pct, { absolute: true }) ||
+    left.code.localeCompare(right.code, "zh-Hant")
+  );
 }
 
 function renderRows(rows) {
@@ -313,7 +498,7 @@ function renderRows(rows) {
 
   if (!rows.length) {
     const emptyRow = document.createElement("tr");
-    emptyRow.innerHTML = '<td colspan="10" class="empty-state">沒有符合目前條件的股票。</td>';
+    emptyRow.innerHTML = `<td colspan="${TABLE_COLUMN_COUNT}" class="empty-state">沒有符合目前條件的股票。</td>`;
     els.stockTableBody.appendChild(emptyRow);
     return;
   }
@@ -329,8 +514,12 @@ function renderRows(rows) {
     const weekCell = node.querySelector(".week-cell");
     const monthCell = node.querySelector(".month-cell");
     const volCell = node.querySelector(".vol-cell");
+    const revenueCell = node.querySelector(".revenue-cell");
+    const ratingCell = node.querySelector(".rating-cell");
     const smaCell = node.querySelector(".sma-cell");
-    const distanceCell = node.querySelector(".distance-cell");
+    const distance200Cell = node.querySelector(".distance200-cell");
+    const sma20Cell = node.querySelector(".sma20-cell");
+    const distance20Cell = node.querySelector(".distance20-cell");
     const marketCell = node.querySelector(".market-cell");
 
     matchCell.appendChild(buildMatchBadges(row));
@@ -340,14 +529,20 @@ function renderRows(rows) {
     weekCell.textContent = formatPercent(row.perfWeek);
     monthCell.textContent = formatPercent(row.perfMonth);
     volCell.textContent = formatPercent(row.volatilityWeek);
+    revenueCell.textContent = formatPercent(row.revenueGrowthTtmYoy);
+    ratingCell.appendChild(buildRatingCell(row));
     smaCell.textContent = formatPrice(row.sma200);
-    distanceCell.textContent = formatPercent(row.distancePct);
+    distance200Cell.textContent = formatPercent(row.distanceSma200Pct);
+    sma20Cell.textContent = formatPrice(row.sma20);
+    distance20Cell.textContent = formatPercent(row.distanceSma20Pct);
     marketCell.innerHTML = `<span class="market-chip">${marketLabel(row.exchange)}</span>`;
 
     weekCell.className = `number-cell week-cell ${getNumberClass(row.perfWeek)}`;
     monthCell.className = `number-cell month-cell ${getNumberClass(row.perfMonth)}`;
     volCell.className = `number-cell vol-cell ${getNumberClass(row.volatilityWeek)}`;
-    distanceCell.className = `number-cell distance-cell ${getNumberClass(row.distancePct)}`;
+    revenueCell.className = `number-cell revenue-cell ${getNumberClass(row.revenueGrowthTtmYoy)}`;
+    distance200Cell.className = `number-cell distance200-cell ${getNumberClass(row.distanceSma200Pct)}`;
+    distance20Cell.className = `number-cell distance20-cell ${getNumberClass(row.distanceSma20Pct)}`;
 
     fragment.appendChild(node);
   });
@@ -359,17 +554,11 @@ function buildMatchBadges(row) {
   const wrap = document.createElement("div");
   wrap.className = "match-badges";
 
-  if (row.bothMatch) {
-    wrap.appendChild(makeBadge("雙重命中", "badge-both"));
-  }
-
-  if (row.weekMatch) {
-    wrap.appendChild(makeBadge("本周大跌", "badge-week"));
-  }
-
-  if (row.monthMatch) {
-    wrap.appendChild(makeBadge("本月大跌", "badge-month"));
-  }
+  MATCH_DEFINITIONS.forEach((definition) => {
+    if (row[definition.key]) {
+      wrap.appendChild(makeBadge(definition.label, definition.badgeClass));
+    }
+  });
 
   return wrap;
 }
@@ -379,6 +568,26 @@ function makeBadge(text, className) {
   badge.className = `badge ${className}`;
   badge.textContent = text;
   return badge;
+}
+
+function buildRatingCell(row) {
+  const wrap = document.createElement("div");
+  wrap.className = "rating-stack";
+
+  if (!row.analystBand) {
+    wrap.innerHTML = '<strong class="neutral">—</strong><span>無資料</span>';
+    return wrap;
+  }
+
+  const label = document.createElement("strong");
+  label.className = row.analystBand.tone;
+  label.textContent = row.analystBand.label;
+
+  const score = document.createElement("span");
+  score.textContent = `分數 ${formatNumber(row.analystScore, 2)}`;
+
+  wrap.append(label, score);
+  return wrap;
 }
 
 function buildSymbolButton(row) {
@@ -452,7 +661,7 @@ async function refreshData() {
   state.loading = true;
   els.refreshButton.disabled = true;
   els.statusText.textContent = "更新中，正在向 TradingView 取得最新台股掃描資料...";
-  els.stockTableBody.innerHTML = '<tr><td colspan="10" class="empty-state">正在更新資料...</td></tr>';
+  els.stockTableBody.innerHTML = `<tr><td colspan="${TABLE_COLUMN_COUNT}" class="empty-state">正在更新資料...</td></tr>`;
 
   try {
     const rows = await fetchStocks();
@@ -469,13 +678,10 @@ async function refreshData() {
     }).format(state.lastUpdated);
 
     els.lastUpdated.textContent = timeText;
-    els.statusText.textContent = `更新完成，共取得 ${rows.length.toLocaleString(
-      "zh-TW",
-    )} 檔台股資料。`;
+    els.statusText.textContent = `更新完成，共取得 ${rows.length.toLocaleString("zh-TW")} 檔台股資料。`;
   } catch (error) {
     els.statusText.textContent = `更新失敗：${error.message}`;
-    els.stockTableBody.innerHTML =
-      '<tr><td colspan="10" class="empty-state">資料更新失敗，請稍後再試。</td></tr>';
+    els.stockTableBody.innerHTML = `<tr><td colspan="${TABLE_COLUMN_COUNT}" class="empty-state">資料更新失敗，請稍後再試。</td></tr>`;
   } finally {
     state.loading = false;
     els.refreshButton.disabled = false;
@@ -488,6 +694,11 @@ function bindEvents() {
   els.marketFilter.addEventListener("change", applyFilters);
   els.matchFilter.addEventListener("change", applyFilters);
   els.sortMode.addEventListener("change", applyFilters);
+  els.analystFilter.addEventListener("change", applyFilters);
+  els.revenueGrowthMin.addEventListener("input", applyFilters);
+  els.revenueGrowthMax.addEventListener("input", applyFilters);
+  els.distance20Min.addEventListener("input", applyFilters);
+  els.distance20Max.addEventListener("input", applyFilters);
   els.preview.addEventListener("mouseenter", () => clearTimeout(state.previewHideTimer));
   els.preview.addEventListener("mouseleave", schedulePreviewHide);
   window.addEventListener("scroll", () => els.preview.classList.add("hidden"), { passive: true });
@@ -501,7 +712,7 @@ function initWarnings() {
       "偵測到你是直接開啟檔案。請先用本地 HTTP 伺服器開啟這個資料夾，才能抓 TradingView 最新資料。";
     els.lastUpdated.textContent = "請改用本地伺服器";
     els.stockTableBody.innerHTML =
-      '<tr><td colspan="10" class="empty-state">請用本地伺服器開啟，例如 `python -m http.server 4173`。</td></tr>';
+      `<tr><td colspan="${TABLE_COLUMN_COUNT}" class="empty-state">請用本地伺服器開啟，例如 \`python -m http.server 4173\`。</td></tr>`;
     return false;
   }
 

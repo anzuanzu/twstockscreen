@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>台股多頭拉回雷達</title>
+    <title>台股 SMA200 條件雷達</title>
     <meta
       name="description"
-      content="依照 TradingView 台股資料，找出符合多頭本周大跌與多頭本月大跌條件的台灣股票。"
+      content="依照 TradingView 台股資料，找出符合多頭回檔與空頭反彈條件的台灣股票，並支援新欄位排序與篩選。"
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -21,10 +21,11 @@
       <header class="hero">
         <div class="hero-copy">
           <p class="eyebrow">TradingView 台股掃描</p>
-          <h1>台股多頭拉回雷達</h1>
+          <h1>台股 SMA200 條件雷達</h1>
           <p class="hero-text">
-            以參考頁面的兩個快捷條件為核心，直接掃描台股最新資料，抓出
-            <strong>仍站在 SMA200 之上</strong>、但已經出現明顯回檔的股票。
+            以參考頁面的快捷條件為核心，直接掃描台股最新資料，抓出
+            <strong>多頭回檔</strong>與<strong>空頭反彈</strong>的股票，並補上收入增長、
+            分析師評級、距 SMA20 等可排序可篩選欄位。
           </p>
           <div class="hero-actions">
             <button id="refreshButton" class="primary-button" type="button">更新最新數據</button>
@@ -42,22 +43,36 @@
         <aside class="logic-panel">
           <h2>條件邏輯</h2>
           <div class="logic-list">
-            <article class="logic-card logic-card-week">
+            <article class="logic-card logic-card-bull-week">
               <span class="logic-pill">多頭本周大跌</span>
               <ul>
                 <li>股票類型</li>
                 <li>收盤價 &gt; SMA200</li>
                 <li>周績效 ≤ -5%</li>
-                <li>周波動率 ≥ 3%</li>
               </ul>
             </article>
-            <article class="logic-card logic-card-month">
+            <article class="logic-card logic-card-bull-month">
               <span class="logic-pill">多頭本月大跌</span>
               <ul>
                 <li>股票類型</li>
                 <li>收盤價 &gt; SMA200</li>
                 <li>月績效 ≤ -10%</li>
-                <li>周波動率 ≥ 3%</li>
+              </ul>
+            </article>
+            <article class="logic-card logic-card-bear-week">
+              <span class="logic-pill">空頭本周大漲</span>
+              <ul>
+                <li>股票類型</li>
+                <li>收盤價 &lt; SMA200</li>
+                <li>周績效 ≥ 5%</li>
+              </ul>
+            </article>
+            <article class="logic-card logic-card-bear-month">
+              <span class="logic-pill">空頭本月大漲</span>
+              <ul>
+                <li>股票類型</li>
+                <li>收盤價 &lt; SMA200</li>
+                <li>月績效 ≥ 10%</li>
               </ul>
             </article>
           </div>
@@ -67,16 +82,20 @@
       <main>
         <section class="summary-grid" aria-label="統計摘要">
           <article class="summary-card">
-            <span class="summary-label">符合本周大跌</span>
-            <strong id="weekCount" class="summary-value">-</strong>
+            <span class="summary-label">多頭本周大跌</span>
+            <strong id="bullWeekCount" class="summary-value">-</strong>
           </article>
           <article class="summary-card">
-            <span class="summary-label">符合本月大跌</span>
-            <strong id="monthCount" class="summary-value">-</strong>
+            <span class="summary-label">多頭本月大跌</span>
+            <strong id="bullMonthCount" class="summary-value">-</strong>
           </article>
           <article class="summary-card">
-            <span class="summary-label">雙重命中</span>
-            <strong id="bothCount" class="summary-value">-</strong>
+            <span class="summary-label">空頭本周大漲</span>
+            <strong id="bearWeekCount" class="summary-value">-</strong>
+          </article>
+          <article class="summary-card">
+            <span class="summary-label">空頭本月大漲</span>
+            <strong id="bearMonthCount" class="summary-value">-</strong>
           </article>
           <article class="summary-card">
             <span class="summary-label">最新更新</span>
@@ -107,9 +126,12 @@
             <label for="matchFilter">檢視模式</label>
             <select id="matchFilter">
               <option value="ALL">全部命中</option>
-              <option value="WEEK">只看本周大跌</option>
-              <option value="MONTH">只看本月大跌</option>
-              <option value="BOTH">只看雙重命中</option>
+              <option value="BULL_ALL">只看多頭回檔</option>
+              <option value="BEAR_ALL">只看空頭反彈</option>
+              <option value="BULL_WEEK">只看多頭本周大跌</option>
+              <option value="BULL_MONTH">只看多頭本月大跌</option>
+              <option value="BEAR_WEEK">只看空頭本周大漲</option>
+              <option value="BEAR_MONTH">只看空頭本月大漲</option>
             </select>
           </div>
 
@@ -117,11 +139,46 @@
             <label for="sortMode">排序方式</label>
             <select id="sortMode">
               <option value="AUTO">依目前模式自動排序</option>
-              <option value="WEEK_ASC">周跌幅最大優先</option>
-              <option value="MONTH_ASC">月跌幅最大優先</option>
-              <option value="DISTANCE_ASC">最貼近 SMA200 優先</option>
+              <option value="BULL_WEEK">周跌幅最大優先</option>
+              <option value="BEAR_WEEK">周漲幅最大優先</option>
+              <option value="BULL_MONTH">月跌幅最大優先</option>
+              <option value="BEAR_MONTH">月漲幅最大優先</option>
+              <option value="DISTANCE_SMA200_ASC">最貼近 SMA200 優先</option>
+              <option value="DISTANCE_SMA20_ASC">最貼近 SMA20 優先</option>
+              <option value="REVENUE_DESC">收入增長高優先</option>
+              <option value="REVENUE_ASC">收入增長低優先</option>
+              <option value="RATING_DESC">分析師評級高優先</option>
+              <option value="RATING_ASC">分析師評級低優先</option>
               <option value="VOL_DESC">波動率高優先</option>
             </select>
+          </div>
+
+          <div class="control-group">
+            <label for="analystFilter">分析師評級</label>
+            <select id="analystFilter">
+              <option value="ALL">全部</option>
+              <option value="STRONG_BUY">強力買進</option>
+              <option value="BUY">買進</option>
+              <option value="NEUTRAL">中立</option>
+              <option value="SELL">賣出</option>
+              <option value="STRONG_SELL">強力賣出</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label for="revenueGrowthMin">收入增長 % TTM年增率</label>
+            <div class="range-fields">
+              <input id="revenueGrowthMin" type="number" step="0.1" placeholder="最小 %" />
+              <input id="revenueGrowthMax" type="number" step="0.1" placeholder="最大 %" />
+            </div>
+          </div>
+
+          <div class="control-group">
+            <label for="distance20Min">距 SMA20</label>
+            <div class="range-fields">
+              <input id="distance20Min" type="number" step="0.1" placeholder="最小 %" />
+              <input id="distance20Max" type="number" step="0.1" placeholder="最大 %" />
+            </div>
           </div>
         </section>
 
@@ -152,14 +209,18 @@
                   <th>周績效</th>
                   <th>月績效</th>
                   <th>周波動率</th>
+                  <th>收入增長 % TTM年增率</th>
+                  <th>分析師評級</th>
                   <th>SMA200</th>
                   <th>距 SMA200</th>
+                  <th>SMA20</th>
+                  <th>距 SMA20</th>
                   <th>市場</th>
                 </tr>
               </thead>
               <tbody id="stockTableBody">
                 <tr>
-                  <td colspan="10" class="empty-state">載入中...</td>
+                  <td colspan="14" class="empty-state">載入中...</td>
                 </tr>
               </tbody>
             </table>
@@ -193,8 +254,12 @@
         <td class="number-cell week-cell"></td>
         <td class="number-cell month-cell"></td>
         <td class="number-cell vol-cell"></td>
+        <td class="number-cell revenue-cell"></td>
+        <td class="rating-cell"></td>
         <td class="number-cell sma-cell"></td>
-        <td class="number-cell distance-cell"></td>
+        <td class="number-cell distance200-cell"></td>
+        <td class="number-cell sma20-cell"></td>
+        <td class="number-cell distance20-cell"></td>
         <td class="market-cell"></td>
       </tr>
     </template>
