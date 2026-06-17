@@ -13,7 +13,7 @@ const COLUMNS = [
   "SMA20",
   "market_cap_basic",
   "type",
-  "Recommend.All",
+  "AnalystRating",
 ];
 
 const MATCH_DEFINITIONS = [
@@ -146,28 +146,21 @@ function getNumberClass(value) {
   return "neutral";
 }
 
-function getAnalystBand(score) {
-  if (score == null || Number.isNaN(score)) {
+function getAnalystBand(rating) {
+  if (!rating) {
     return null;
   }
 
-  if (score < -0.5) {
-    return { value: "STRONG_SELL", label: "強力賣出", tone: "negative" };
-  }
+  const map = {
+    StrongBuy: { value: "STRONG_BUY", label: "強力買入", tone: "positive", rank: 5 },
+    Buy: { value: "BUY", label: "買入", tone: "positive", rank: 4 },
+    Neutral: { value: "NEUTRAL", label: "中立", tone: "neutral", rank: 3 },
+    Sell: { value: "SELL", label: "賣出", tone: "negative", rank: 2 },
+    StrongSell: { value: "STRONG_SELL", label: "強力賣出", tone: "negative", rank: 1 },
+    NoRating: { value: "NO_RATING", label: "無評級", tone: "neutral", rank: 0 },
+  };
 
-  if (score < -0.1) {
-    return { value: "SELL", label: "賣出", tone: "negative" };
-  }
-
-  if (score <= 0.1) {
-    return { value: "NEUTRAL", label: "中立", tone: "neutral" };
-  }
-
-  if (score <= 0.5) {
-    return { value: "BUY", label: "買進", tone: "positive" };
-  }
-
-  return { value: "STRONG_BUY", label: "強力買進", tone: "positive" };
+  return map[rating] || { value: "NO_RATING", label: rating, tone: "neutral", rank: 0 };
 }
 
 function buildWidgetUrl(symbol) {
@@ -213,7 +206,7 @@ function normaliseRow(item) {
     sma20,
     marketCap,
     type,
-    analystScore,
+    analystRating,
   ] = item.d;
 
   const isStock = type === "stock" && close != null && sma200 != null;
@@ -221,7 +214,7 @@ function normaliseRow(item) {
   const bullMonthMatch = isStock && close > sma200 && perfMonth != null && perfMonth <= -10;
   const bearWeekMatch = isStock && close < sma200 && perfWeek != null && perfWeek >= 5;
   const bearMonthMatch = isStock && close < sma200 && perfMonth != null && perfMonth >= 10;
-  const analystBand = getAnalystBand(analystScore);
+  const analystBand = getAnalystBand(analystRating);
 
   return {
     id: item.s,
@@ -239,7 +232,7 @@ function normaliseRow(item) {
     sma20,
     marketCap,
     type,
-    analystScore,
+    analystRating,
     analystBand,
     bullWeekMatch,
     bullMonthMatch,
@@ -498,11 +491,17 @@ function compareRows(left, right, sortMode, matchMode) {
   }
 
   if (effectiveMode === "RATING_DESC") {
-    return compareNumeric(left.analystScore, right.analystScore, { direction: "desc" });
+    return (
+      compareNumeric(left.analystBand?.rank, right.analystBand?.rank, { direction: "desc" }) ||
+      left.code.localeCompare(right.code, "zh-Hant")
+    );
   }
 
   if (effectiveMode === "RATING_ASC") {
-    return compareNumeric(left.analystScore, right.analystScore);
+    return (
+      compareNumeric(left.analystBand?.rank, right.analystBand?.rank) ||
+      left.code.localeCompare(right.code, "zh-Hant")
+    );
   }
 
   if (effectiveMode === "VOL_DESC") {
@@ -619,18 +618,14 @@ function buildRatingCell(row) {
   wrap.className = "rating-stack";
 
   if (!row.analystBand) {
-    wrap.innerHTML = '<strong class="neutral">—</strong><span>無資料</span>';
+    wrap.innerHTML = '<strong class="neutral">無評級</strong>';
     return wrap;
   }
 
   const label = document.createElement("strong");
   label.className = row.analystBand.tone;
   label.textContent = row.analystBand.label;
-
-  const score = document.createElement("span");
-  score.textContent = `分數 ${formatNumber(row.analystScore, 3)}`;
-
-  wrap.append(label, score);
+  wrap.append(label);
   return wrap;
 }
 
