@@ -1,3 +1,4 @@
+const SCAN_PROXY_URL = "/api/taiwan-scan";
 const SCAN_URL = "https://scanner.tradingview.com/taiwan/scan";
 const TABLE_COLUMN_COUNT = 14;
 const COLUMNS = [
@@ -31,6 +32,10 @@ const ANALYST_BANDS = [
   { value: "STRONG_SELL", label: "強力賣出", min: Number.NEGATIVE_INFINITY, max: -0.5, tone: "negative" },
 ];
 
+const REVENUE_PROXY_URL = "/api/revenue-growth";
+const TWSE_REVENUE_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap05_L";
+const TPEX_REVENUE_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O";
+
 function selectAny(selectors) {
   for (const selector of selectors) {
     const element = document.querySelector(selector);
@@ -48,6 +53,7 @@ const state = {
   filteredRows: [],
   lastUpdated: null,
   previewHideTimer: null,
+  revenueStatus: "idle",
 };
 
 const els = {
@@ -193,6 +199,15 @@ function buildSymbolPageUrl(symbol) {
   return `https://tw.tradingview.com/chart/?symbol=${encodeURIComponent(symbol)}`;
 }
 
+function parseRevenueNumber(value) {
+  if (value == null) {
+    return null;
+  }
+
+  const parsed = Number(String(value).replaceAll(",", "").trim());
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function normaliseRow(item) {
   const [exchange, code] = item.s.split(":");
   const [
@@ -237,6 +252,7 @@ function normaliseRow(item) {
     analystScore,
     analystBand,
     revenueGrowthTtmYoy,
+    revenueGrowthSource: revenueGrowthTtmYoy == null ? "tradingview-empty" : "tradingview",
     bullWeekMatch,
     bullMonthMatch,
     bearWeekMatch,
@@ -247,6 +263,63 @@ function normaliseRow(item) {
     distanceSma200Pct: distancePercent(close, sma200),
     distanceSma20Pct: distancePercent(close, sma20),
   };
+}
+
+async function fetchOfficialRevenueGrowth() {
+  let twseRows = [];
+  let tpexRows = [];
+
+  try {
+    const proxyResponse = await fetch(REVENUE_PROXY_URL);
+
+    if (!proxyResponse.ok) {
+      throw new Error(`proxy ${proxyResponse.status}`);
+    }
+
+    const proxyPayload = await proxyResponse.json();
+    twseRows = Array.isArray(proxyPayload.twse) ? proxyPayload.twse : [];
+    tpexRows = Array.isArray(proxyPayload.tpex) ? proxyPayload.tpex : [];
+    state.revenueStatus = "proxy";
+  } catch {
+    state.revenueStatus = "unavailable";
+    return new Map();
+  }
+
+  const revenueMap = new Map();
+
+  for (const row of [...twseRows, ...tpexRows]) {
+    const code = row["公司代號"];
+    const growth = parseRevenueNumber(row["累計營業收入-前期比較增減(%)"]);
+    const month = row["資料年月"] || null;
+
+    if (!code || growth == null) {
+      continue;
+    }
+
+    revenueMap.set(code, {
+      growth,
+      month,
+    });
+  }
+
+  return revenueMap;
+}
+
+function mergeRevenueGrowth(rows, revenueMap) {
+  return rows.map((row) => {
+    const revenue = revenueMap.get(row.code);
+
+    if (!revenue || row.revenueGrowthTtmYoy != null) {
+      return row;
+    }
+
+    return {
+      ...row,
+      revenueGrowthTtmYoy: revenue.growth,
+      revenueGrowthSource: "official-ytd",
+      revenueGrowthMonth: revenue.month,
+    };
+  });
 }
 
 async function fetchStocks() {
@@ -261,10 +334,24 @@ async function fetchStocks() {
     columns: COLUMNS,
   };
 
-  const response = await fetch(SCAN_URL, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  let response;
+
+  try {
+    response = await fetch(SCAN_PROXY_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`proxy ${response.status}`);
+    }
+  } catch {
+    response = await fetch(SCAN_URL, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
 
   if (!response.ok) {
     throw new Error(`資料請求失敗 (${response.status})`);
@@ -717,11 +804,11 @@ async function refreshData() {
   );
 
   try {
-    const rows = await fetchStocks();
-    state.rows = rows;
+    const [rows, revenueMap] = await Promise.all([fetchStocks(), fetchOfficialRevenueGrowth()]);
+    state.rows = mergeRevenueGrowth(rows, revenueMap);
     state.lastUpdated = new Date();
 
-    updateSummary(rows);
+    updateSummary(state.rows);
     applyFilters();
 
     const timeText = new Intl.DateTimeFormat("zh-TW", {
@@ -731,7 +818,12 @@ async function refreshData() {
     }).format(state.lastUpdated);
 
     setText(els.lastUpdated, timeText);
-    setText(els.statusText, `更新完成，共取得 ${rows.length.toLocaleString("zh-TW")} 檔台股資料。`);
+    const revenueNote =
+      state.revenueStatus === "proxy" ? " 已載入官方營收年增資料。" : " 官方營收年增資料暫時不可用。";
+    setText(
+      els.statusText,
+      `更新完成，共取得 ${state.rows.length.toLocaleString("zh-TW")} 檔台股資料。${revenueNote}`,
+    );
   } catch (error) {
     setText(els.statusText, `更新失敗：${error.message}`);
     setHtml(
@@ -773,7 +865,7 @@ function initWarnings() {
     setText(els.lastUpdated, "請改用本地伺服器");
     setHtml(
       els.stockTableBody,
-      `<tr><td colspan="${TABLE_COLUMN_COUNT}" class="empty-state">請用本地伺服器開啟，例如 \`python -m http.server 4173\`。</td></tr>`,
+      `<tr><td colspan="${TABLE_COLUMN_COUNT}" class="empty-state">請用本地伺服器開啟，建議使用 \`node server.js\`。</td></tr>`,
     );
     return false;
   }
