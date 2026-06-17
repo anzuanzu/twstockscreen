@@ -31,6 +31,17 @@ const ANALYST_BANDS = [
   { value: "STRONG_SELL", label: "強力賣出", min: Number.NEGATIVE_INFINITY, max: -0.5, tone: "negative" },
 ];
 
+function selectAny(selectors) {
+  for (const selector of selectors) {
+    const element = document.querySelector(selector);
+    if (element) {
+      return element;
+    }
+  }
+
+  return null;
+}
+
 const state = {
   loading: false,
   rows: [],
@@ -42,9 +53,9 @@ const state = {
 const els = {
   refreshButton: document.querySelector("#refreshButton"),
   statusText: document.querySelector("#statusText"),
-  bullWeekCount: document.querySelector("#bullWeekCount"),
-  bullMonthCount: document.querySelector("#bullMonthCount"),
-  bearWeekCount: document.querySelector("#bearWeekCount"),
+  bullWeekCount: selectAny(["#bullWeekCount", "#weekCount"]),
+  bullMonthCount: selectAny(["#bullMonthCount", "#monthCount"]),
+  bearWeekCount: selectAny(["#bearWeekCount", "#bothCount"]),
   bearMonthCount: document.querySelector("#bearMonthCount"),
   lastUpdated: document.querySelector("#lastUpdated"),
   searchInput: document.querySelector("#searchInput"),
@@ -66,6 +77,18 @@ const els = {
   previewFrame: document.querySelector("#previewFrame"),
   protocolWarning: document.querySelector("#protocolWarning"),
 };
+
+function setText(element, value) {
+  if (element) {
+    element.textContent = value;
+  }
+}
+
+function setHtml(element, value) {
+  if (element) {
+    element.innerHTML = value;
+  }
+}
 
 function formatNumber(value, digits = 2) {
   if (value == null || Number.isNaN(value)) {
@@ -257,14 +280,10 @@ async function fetchStocks() {
 }
 
 function updateSummary(rows) {
-  els.bullWeekCount.textContent = rows.filter((row) => row.bullWeekMatch).length.toLocaleString("zh-TW");
-  els.bullMonthCount.textContent = rows
-    .filter((row) => row.bullMonthMatch)
-    .length.toLocaleString("zh-TW");
-  els.bearWeekCount.textContent = rows.filter((row) => row.bearWeekMatch).length.toLocaleString("zh-TW");
-  els.bearMonthCount.textContent = rows
-    .filter((row) => row.bearMonthMatch)
-    .length.toLocaleString("zh-TW");
+  setText(els.bullWeekCount, rows.filter((row) => row.bullWeekMatch).length.toLocaleString("zh-TW"));
+  setText(els.bullMonthCount, rows.filter((row) => row.bullMonthMatch).length.toLocaleString("zh-TW"));
+  setText(els.bearWeekCount, rows.filter((row) => row.bearWeekMatch).length.toLocaleString("zh-TW"));
+  setText(els.bearMonthCount, rows.filter((row) => row.bearMonthMatch).length.toLocaleString("zh-TW"));
 }
 
 function parseInputNumber(input) {
@@ -330,11 +349,11 @@ function matchesAnalystFilter(row, analystFilter) {
 }
 
 function applyFilters() {
-  const keyword = els.searchInput.value.trim().toLowerCase();
-  const market = els.marketFilter.value;
-  const matchMode = els.matchFilter.value;
-  const sortMode = els.sortMode.value;
-  const analystFilter = els.analystFilter.value;
+  const keyword = els.searchInput?.value.trim().toLowerCase() || "";
+  const market = els.marketFilter?.value || "ALL";
+  const matchMode = els.matchFilter?.value || "ALL";
+  const sortMode = els.sortMode?.value || "AUTO";
+  const analystFilter = els.analystFilter?.value || "ALL";
   const revenueMin = parseInputNumber(els.revenueGrowthMin);
   const revenueMax = parseInputNumber(els.revenueGrowthMax);
   const distance20Min = parseInputNumber(els.distance20Min);
@@ -372,7 +391,10 @@ function applyFilters() {
   const sorted = [...filtered].sort((left, right) => compareRows(left, right, sortMode, matchMode));
   state.filteredRows = sorted;
   renderRows(sorted);
-  els.resultMeta.textContent = `顯示 ${sorted.length.toLocaleString("zh-TW")} 檔 / 原始掃描 ${state.rows.length.toLocaleString("zh-TW")} 檔`;
+  setText(
+    els.resultMeta,
+    `顯示 ${sorted.length.toLocaleString("zh-TW")} 檔 / 原始掃描 ${state.rows.length.toLocaleString("zh-TW")} 檔`,
+  );
 }
 
 function effectiveSortMode(sortMode, matchMode) {
@@ -494,6 +516,10 @@ function compareRows(left, right, sortMode, matchMode) {
 }
 
 function renderRows(rows) {
+  if (!els.stockTableBody) {
+    return;
+  }
+
   els.stockTableBody.innerHTML = "";
 
   if (!rows.length) {
@@ -506,7 +532,23 @@ function renderRows(rows) {
   const fragment = document.createDocumentFragment();
 
   rows.forEach((row) => {
-    const node = els.rowTemplate.content.firstElementChild.cloneNode(true);
+    const node = document.createElement("tr");
+    node.innerHTML = `
+      <td class="match-cell"></td>
+      <td class="symbol-cell"></td>
+      <td class="number-cell close-cell"></td>
+      <td class="close-date-cell"></td>
+      <td class="number-cell week-cell"></td>
+      <td class="number-cell month-cell"></td>
+      <td class="number-cell vol-cell"></td>
+      <td class="number-cell revenue-cell"></td>
+      <td class="rating-cell"></td>
+      <td class="number-cell sma-cell"></td>
+      <td class="number-cell distance200-cell"></td>
+      <td class="number-cell sma20-cell"></td>
+      <td class="number-cell distance20-cell"></td>
+      <td class="market-cell"></td>
+    `;
     const matchCell = node.querySelector(".match-cell");
     const symbolCell = node.querySelector(".symbol-cell");
     const closeCell = node.querySelector(".close-cell");
@@ -524,25 +566,27 @@ function renderRows(rows) {
 
     matchCell.appendChild(buildMatchBadges(row));
     symbolCell.appendChild(buildSymbolButton(row));
-    closeCell.textContent = formatPrice(row.close);
-    closeDateCell.textContent = formatCloseDate(row.closeTime);
-    weekCell.textContent = formatPercent(row.perfWeek);
-    monthCell.textContent = formatPercent(row.perfMonth);
-    volCell.textContent = formatPercent(row.volatilityWeek);
-    revenueCell.textContent = formatPercent(row.revenueGrowthTtmYoy);
-    ratingCell.appendChild(buildRatingCell(row));
-    smaCell.textContent = formatPrice(row.sma200);
-    distance200Cell.textContent = formatPercent(row.distanceSma200Pct);
-    sma20Cell.textContent = formatPrice(row.sma20);
-    distance20Cell.textContent = formatPercent(row.distanceSma20Pct);
-    marketCell.innerHTML = `<span class="market-chip">${marketLabel(row.exchange)}</span>`;
+    setText(closeCell, formatPrice(row.close));
+    setText(closeDateCell, formatCloseDate(row.closeTime));
+    setText(weekCell, formatPercent(row.perfWeek));
+    setText(monthCell, formatPercent(row.perfMonth));
+    setText(volCell, formatPercent(row.volatilityWeek));
+    setText(revenueCell, formatPercent(row.revenueGrowthTtmYoy));
+    if (ratingCell) {
+      ratingCell.appendChild(buildRatingCell(row));
+    }
+    setText(smaCell, formatPrice(row.sma200));
+    setText(distance200Cell, formatPercent(row.distanceSma200Pct));
+    setText(sma20Cell, formatPrice(row.sma20));
+    setText(distance20Cell, formatPercent(row.distanceSma20Pct));
+    setHtml(marketCell, `<span class="market-chip">${marketLabel(row.exchange)}</span>`);
 
-    weekCell.className = `number-cell week-cell ${getNumberClass(row.perfWeek)}`;
-    monthCell.className = `number-cell month-cell ${getNumberClass(row.perfMonth)}`;
-    volCell.className = `number-cell vol-cell ${getNumberClass(row.volatilityWeek)}`;
-    revenueCell.className = `number-cell revenue-cell ${getNumberClass(row.revenueGrowthTtmYoy)}`;
-    distance200Cell.className = `number-cell distance200-cell ${getNumberClass(row.distanceSma200Pct)}`;
-    distance20Cell.className = `number-cell distance20-cell ${getNumberClass(row.distanceSma20Pct)}`;
+    if (weekCell) weekCell.className = `number-cell week-cell ${getNumberClass(row.perfWeek)}`;
+    if (monthCell) monthCell.className = `number-cell month-cell ${getNumberClass(row.perfMonth)}`;
+    if (volCell) volCell.className = `number-cell vol-cell ${getNumberClass(row.volatilityWeek)}`;
+    if (revenueCell) revenueCell.className = `number-cell revenue-cell ${getNumberClass(row.revenueGrowthTtmYoy)}`;
+    if (distance200Cell) distance200Cell.className = `number-cell distance200-cell ${getNumberClass(row.distanceSma200Pct)}`;
+    if (distance20Cell) distance20Cell.className = `number-cell distance20-cell ${getNumberClass(row.distanceSma20Pct)}`;
 
     fragment.appendChild(node);
   });
@@ -612,9 +656,13 @@ function buildSymbolButton(row) {
 
 function showPreview(anchor, row) {
   clearTimeout(state.previewHideTimer);
+  if (!els.preview || !els.previewSymbol || !els.previewName || !els.previewLink || !els.previewFrame) {
+    return;
+  }
+
   els.preview.classList.remove("hidden");
-  els.previewSymbol.textContent = row.symbol;
-  els.previewName.textContent = row.name;
+  setText(els.previewSymbol, row.symbol);
+  setText(els.previewName, row.name);
   els.previewLink.href = buildSymbolPageUrl(row.symbol);
 
   const nextSrc = buildWidgetUrl(row.symbol);
@@ -659,9 +707,14 @@ async function refreshData() {
   }
 
   state.loading = true;
-  els.refreshButton.disabled = true;
-  els.statusText.textContent = "更新中，正在向 TradingView 取得最新台股掃描資料...";
-  els.stockTableBody.innerHTML = `<tr><td colspan="${TABLE_COLUMN_COUNT}" class="empty-state">正在更新資料...</td></tr>`;
+  if (els.refreshButton) {
+    els.refreshButton.disabled = true;
+  }
+  setText(els.statusText, "更新中，正在向 TradingView 取得最新台股掃描資料...");
+  setHtml(
+    els.stockTableBody,
+    `<tr><td colspan="${TABLE_COLUMN_COUNT}" class="empty-state">正在更新資料...</td></tr>`,
+  );
 
   try {
     const rows = await fetchStocks();
@@ -677,42 +730,51 @@ async function refreshData() {
       timeZone: "Asia/Taipei",
     }).format(state.lastUpdated);
 
-    els.lastUpdated.textContent = timeText;
-    els.statusText.textContent = `更新完成，共取得 ${rows.length.toLocaleString("zh-TW")} 檔台股資料。`;
+    setText(els.lastUpdated, timeText);
+    setText(els.statusText, `更新完成，共取得 ${rows.length.toLocaleString("zh-TW")} 檔台股資料。`);
   } catch (error) {
-    els.statusText.textContent = `更新失敗：${error.message}`;
-    els.stockTableBody.innerHTML = `<tr><td colspan="${TABLE_COLUMN_COUNT}" class="empty-state">資料更新失敗，請稍後再試。</td></tr>`;
+    setText(els.statusText, `更新失敗：${error.message}`);
+    setHtml(
+      els.stockTableBody,
+      `<tr><td colspan="${TABLE_COLUMN_COUNT}" class="empty-state">資料更新失敗，請稍後再試。</td></tr>`,
+    );
   } finally {
     state.loading = false;
-    els.refreshButton.disabled = false;
+    if (els.refreshButton) {
+      els.refreshButton.disabled = false;
+    }
   }
 }
 
 function bindEvents() {
-  els.refreshButton.addEventListener("click", refreshData);
-  els.searchInput.addEventListener("input", applyFilters);
-  els.marketFilter.addEventListener("change", applyFilters);
-  els.matchFilter.addEventListener("change", applyFilters);
-  els.sortMode.addEventListener("change", applyFilters);
-  els.analystFilter.addEventListener("change", applyFilters);
-  els.revenueGrowthMin.addEventListener("input", applyFilters);
-  els.revenueGrowthMax.addEventListener("input", applyFilters);
-  els.distance20Min.addEventListener("input", applyFilters);
-  els.distance20Max.addEventListener("input", applyFilters);
-  els.preview.addEventListener("mouseenter", () => clearTimeout(state.previewHideTimer));
-  els.preview.addEventListener("mouseleave", schedulePreviewHide);
-  window.addEventListener("scroll", () => els.preview.classList.add("hidden"), { passive: true });
-  window.addEventListener("resize", () => els.preview.classList.add("hidden"));
+  els.refreshButton?.addEventListener("click", refreshData);
+  els.searchInput?.addEventListener("input", applyFilters);
+  els.marketFilter?.addEventListener("change", applyFilters);
+  els.matchFilter?.addEventListener("change", applyFilters);
+  els.sortMode?.addEventListener("change", applyFilters);
+  els.analystFilter?.addEventListener("change", applyFilters);
+  els.revenueGrowthMin?.addEventListener("input", applyFilters);
+  els.revenueGrowthMax?.addEventListener("input", applyFilters);
+  els.distance20Min?.addEventListener("input", applyFilters);
+  els.distance20Max?.addEventListener("input", applyFilters);
+  els.preview?.addEventListener("mouseenter", () => clearTimeout(state.previewHideTimer));
+  els.preview?.addEventListener("mouseleave", schedulePreviewHide);
+  window.addEventListener("scroll", () => els.preview?.classList.add("hidden"), { passive: true });
+  window.addEventListener("resize", () => els.preview?.classList.add("hidden"));
 }
 
 function initWarnings() {
   if (window.location.protocol === "file:") {
-    els.protocolWarning.classList.remove("hidden");
-    els.statusText.textContent =
-      "偵測到你是直接開啟檔案。請先用本地 HTTP 伺服器開啟這個資料夾，才能抓 TradingView 最新資料。";
-    els.lastUpdated.textContent = "請改用本地伺服器";
-    els.stockTableBody.innerHTML =
-      `<tr><td colspan="${TABLE_COLUMN_COUNT}" class="empty-state">請用本地伺服器開啟，例如 \`python -m http.server 4173\`。</td></tr>`;
+    els.protocolWarning?.classList.remove("hidden");
+    setText(
+      els.statusText,
+      "偵測到你是直接開啟檔案。請先用本地 HTTP 伺服器開啟這個資料夾，才能抓 TradingView 最新資料。",
+    );
+    setText(els.lastUpdated, "請改用本地伺服器");
+    setHtml(
+      els.stockTableBody,
+      `<tr><td colspan="${TABLE_COLUMN_COUNT}" class="empty-state">請用本地伺服器開啟，例如 \`python -m http.server 4173\`。</td></tr>`,
+    );
     return false;
   }
 
